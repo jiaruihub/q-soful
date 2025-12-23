@@ -25,7 +25,7 @@ Specifically, we aim to demonstrate:
 ## 3. Implementation Details & Assumptions
 
 ### 3.1 The Simulated Quantum Oracle
-[cite_start]Since we do not have a physical QPU, we simulate `QMeanEstimate` [cite: 42] classically:
+Since we do not have a physical QPU, we simulate `QMeanEstimate` [cite: 42] classically:
 * **Input:** Action $x$, Accuracy $\epsilon$, Failure Prob $\delta$.
 * **Process:**
     1. Calculate true mean $\mu = x^\top \theta^*$.
@@ -38,7 +38,7 @@ The Weighted Lasso problem (Eq 8) is convex. We use `cvxpy` for rigorous correct
 * **Note:** For very high dimensions ($d > 1000$), we may switch to `sklearn.linear_model.Lasso` (coordinate descent) for speed, ensuring `sample_weight` is set to $1/\epsilon_i^2$.
 
 ### 3.3 The Restricted Eigenvalue (RE) Condition
-[cite_start]The paper relies on the design matrix satisfying the RE condition on the cone $C(S, 3)$[cite: 134].
+The paper relies on the design matrix satisfying the RE condition on the cone $C(S, 3)$[cite: 134].
 * **Sanity Check:** The code includes a `monitor_eigenvalues` flag. If enabled, it computes the minimum eigenvalue of the weighted design matrix restricted to the support $S$ to explicitly verify $\kappa > 0$.
 
 ## 4. Running Experiments
@@ -68,6 +68,3 @@ The Weighted Lasso problem (Eq 8) is convex. We use `cvxpy` for rigorous correct
     * *Approximation:* Since the objective is convex, the maximum lies at a vertex. We iterate over the $2^d$ vertices? No, that is exponential.
     * *Relaxation:* In this implementation, we simply check the corners aligned with the sign of $\hat{\theta}$ and random samples, or use a linear programming relaxation if valid. *Correction based on standard literature:* For $l_1$ balls and box constraints, the max is often at a corner. We will implement a heuristic corner search.
 
-## 6. Citation
-If you use this code, please cite the original paper:
-> Hu, H. (2025). Q-SOFUL: Exponential Quantum Speedups for High-Dimensional Sparse Linear Bandits.
