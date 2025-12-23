@@ -3,7 +3,7 @@
 ## 1. Project Objective
 This repository contains the reference implementation of **Q-SOFUL** (Quantum Sparse Optimism in the Face of Uncertainty for Linear bandits).
 
-[cite_start]The primary goal is to empirically verify the theoretical bound derived in *Hu (2025)*[cite: 1, 2]:
+The primary goal is to empirically verify the theoretical bound derived in *Hu (2025)*[cite: 1, 2]:
 $$R(Q_{total}) \le \tilde{\mathcal{O}}\left(\frac{s^*}{\kappa^2}\sqrt{\log d} \log Q_{total}\right)$$
 
 Specifically, we aim to demonstrate:
