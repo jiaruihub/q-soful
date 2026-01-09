@@ -1,70 +1,83 @@
-# Q-SOFUL: Empirical Validation of Exponential Quantum Speedups
+# Q-SOFUL: Exponential Quantum Speedups for High-Dimensional Sparse Linear Bandits
 
-## 1. Project Objective
-This repository contains the reference implementation of **Q-SOFUL** (Quantum Sparse Optimism in the Face of Uncertainty for Linear bandits).
+## 1. Project Overview
+This repository contains the reference implementation of **Q-SOFUL** (Quantum Sparse Optimism in the Face of Uncertainty for Linear bandits), as proposed in *Hu (2025)*.
 
-The primary goal is to empirically verify the theoretical bound derived in *Hu (2025)*[cite: 1, 2]:
-$$R(Q_{total}) \le \tilde{\mathcal{O}}\left(\frac{s^*}{\kappa^2}\sqrt{\log d} \log Q_{total}\right)$$
+### The Problem
+Classical high-dimensional bandit algorithms (like LinUCB) suffer from a "Curse of Dimensionality," with regret scaling as $\tilde{\mathcal{O}}(d\sqrt{T})$. In high-dimensional settings (large $d$), this is prohibitively expensive.
 
-Specifically, we aim to demonstrate:
-1.  **Dimension Independence:** Regret scales with $\sqrt{\log d}$ rather than $\sqrt{d}$ (as seen in classical LinUCB).
-2.  **Quantum Speedup:** Regret scales logarithmically with the query budget ($\log Q_{total}$), implying exponential speedup over classical limits.
-3.  **Sparsity Recovery:** The Weighted Lasso correctly identifies the support $S$ of $\theta^*$ despite the heterogeneous noise $\epsilon_k$ induced by the quantum oracle.
+### The Solution
+We propose a **quantum-assisted algorithm** that leverages:
+1.  **Quantum Mean Estimation (QME):** A subroutine that trades queries for precision ($n \propto 1/\varepsilon$).
+2.  **Sparsity:** The assumption that the true parameter $\theta^\star$ is $s^\star$-sparse.
+3.  **Smoothed Exploration:** Adding perturbations to actions to guarantee identifying information (Restricted Eigenvalue condition).
+
+### The Main Result
+We empirically verify the theoretical query-regret bound derived in the paper:
+$$R(Q_{\mathrm{total}}) \;\le\; \tilde{\mathcal{O}}\!\left(\frac{s^\star}{\kappa^2}\sqrt{\log d}\,\log Q_{\mathrm{total}}\right)$$
+This result demonstrates **dimension independence** (scaling with $\log d$ instead of $d$) and **exponential quantum speedup** (logarithmic regret in total queries).
 
 ## 2. Theoretical Mapping (Paper $\to$ Code)
 
-| Concept | Paper Reference | Code Implementation |
+The codebase is structured to strictly follow the definitions in the paper.
+
+| Concept | Paper Equation | Implementation Details |
 | :--- | :--- | :--- |
-| **Interaction Model** | Eq (1) & (5) | `Environment.query_oracle(action, epsilon)` |
-| **Quantum Oracle** | Assumption 1 (Eq 3-4) | Simulates noise $\zeta \sim U[-1, 1]$, scaled by $\epsilon$. Cost $n \propto 1/\epsilon$. |
-| **Smoothing** | Sec 3.1, Eq (78) | `Agent.perturb_action()` adds truncated $\mathcal{N}(0, \sigma_p^2)$. |
-| **Weighted Lasso** | Eq (8) | `cvxpy` optimization with weights $w_i = 1/\epsilon_i^2$. |
-| **$l_1$ Confidence** | Lemma 1, Eq (14) | `Agent.beta_k` calculated dynamically based on effective sample size $W_k$. |
-| **Schedule** | Eq (10) | Epoch schedule $\epsilon_k = 1/\sqrt{W_{k-1}}$. |
+| **Smoothed Action** | Sec 3.1 | `agent.py`: `select_action` adds truncated Gaussian noise $\xi \in [-M, M]^d$. |
+| **Safe Set** | Sec 3.1 | Actions are constrained to $\mathcal{A}' = (1-\gamma)\mathcal{A}$ to keep $x+\xi$ feasible. |
+| **Quantum Oracle** | Eq (3-4) | `oracles.py`: Simulates `QMeanEstimate` with cost $n_k \propto \varepsilon_k^{-1} \log(1/\delta_k)$. |
+| **Weighted Lasso** | Eq (8) | `agent.py`: Solves $\min \frac{1}{2W_k}\sum w_i(y_i - x_i^\top \theta)^2 + \alpha \|\theta\|_1$ with $w_i = \varepsilon_i^{-2}$. |
+| **$L_\infty$ Bonus** | Eq (11) | `agent.py`: UCB Index $= x^\top \hat{\theta} + \beta \|x\|_\infty$. |
+| **Geometric Schedule** | Eq (12) | `agent.py`: Updates accuracy $\varepsilon_k = 1/\sqrt{W_{k-1}}$ at each epoch. |
 
-## 3. Implementation Details & Assumptions
+## 3. Experimental Validation
 
-### 3.1 The Simulated Quantum Oracle
-Since we do not have a physical QPU, we simulate `QMeanEstimate` [cite: 42] classically:
-* **Input:** Action $x$, Accuracy $\epsilon$, Failure Prob $\delta$.
-* **Process:**
-    1. Calculate true mean $\mu = x^\top \theta^*$.
-    2. Sample noise $\zeta$ such that $|\zeta| \le 1$. In this repo, we use uniform noise $\zeta \sim \text{Uniform}(-1, 1)$.
-    3. Return $\hat{y} = \mu + \epsilon \cdot \zeta$.
-    4. Increment global counter `Q_total` by $\lceil \frac{C_{QME}}{\epsilon} \log(1/\delta) \rceil$.
+The `experiments_new.ipynb` notebook contains five key experiments that validate the theoretical claims.
 
-### 3.2 Optimization Solvers
-The Weighted Lasso problem (Eq 8) is convex. We use `cvxpy` for rigorous correctness to ensure the KKT conditions (and thus the RE condition logic) are respected.
-* **Note:** For very high dimensions ($d > 1000$), we may switch to `sklearn.linear_model.Lasso` (coordinate descent) for speed, ensuring `sample_weight` is set to $1/\epsilon_i^2$.
+### Experiment 1: The "Dimension Kill" (Validation of $\sqrt{\log d}$)
+* **Hypothesis:** Unlike classical methods, Q-SOFUL's regret should not explode as dimension $d$ grows.
+* **Result:** Comparing Q-SOFUL vs. LinUCB for $d \in [50, 100, 200, 500]$ shows that Q-SOFUL's regret remains nearly flat, validating the $\sqrt{\log d}$ scaling.
 
-### 3.3 The Restricted Eigenvalue (RE) Condition
-The paper relies on the design matrix satisfying the RE condition on the cone $C(S, 3)$[cite: 134].
-* **Sanity Check:** The code includes a `monitor_eigenvalues` flag. If enabled, it computes the minimum eigenvalue of the weighted design matrix restricted to the support $S$ to explicitly verify $\kappa > 0$.
+### Experiment 2: Horizon Scaling (Validation of $\log Q$)
+* **Hypothesis:** Regret should scale logarithmically with the query budget.
+* **Result:** A plot of $Regret$ vs $\log(Q_{total})$ yields a linear relationship, confirming the exponential speedup provided by the quantum oracle.
 
-## 4. Running Experiments
+### Experiment 3: Sparsity Robustness ($s^\star$)
+* **Hypothesis:** The algorithm should handle varying levels of sparsity.
+* **Result:** We varied $s^\star \in [3, 20]$. Regret increases only slightly, showing that the cost of learning the "null space" dominates, making the algorithm robust to small changes in sparsity.
+
+### Experiment 4: Support Recovery Analysis
+* **Hypothesis:** The Weighted Lasso should identify the non-zero indices of $\theta^\star$.
+* **Result:** Using a threshold of $0.01$ (to filter solver noise), we track the Jaccard Index (IoU). The agent successfully recovers the support set as $Q \to \infty$, though perfect recovery is not strictly required for low regret.
+
+### Experiment 5: Ablation Study (Weighted vs. Unweighted)
+* **Hypothesis:** The inverse-variance weighting $w_i = 1/\varepsilon_i^2$ is crucial for handling heterogeneous quantum noise.
+* **Result:** We compare **Q-SOFUL** against a **Naive Unweighted** baseline. The Unweighted agent fails to converge efficiently, proving that the weighting scheme is essential for the theoretical guarantee.
+
+## 4. Usage
 
 ### Prerequisites
 * Python 3.9+
-* `numpy`, `scipy`, `matplotlib`, `cvxpy`, `seaborn`
+* Dependencies: `numpy`, `scipy`, `matplotlib`, `seaborn`, `scikit-learn`, `tqdm`.
 
-### Reproduction Steps
-1.  **Sanity Check (Low Dimensions):**
-    Run `test_lasso_convergence.py` to confirm the Weighted Lasso recovers $\theta^*$ as $Q_{total} \to \infty$ with the geometric schedule.
+### Running the Code
+1.  **Clone the repository.**
+2.  **Run the experiments:**
+    ```bash
+    jupyter notebook experiments_new.ipynb
+    ```
+3.  **Inspect Source:**
+    * `agent.py`: Contains the `QSOFULAgent` and the Weighted Lasso logic.
+    * `environment.py`: Manages the high-dimensional linear bandit simulation.
+    * `oracles.py`: Contains the `StatisticalAEOracle` (Physics-faithful) and `SimulatedQuantumOracle` (Fast proxy).
 
-2.  **Experiment 1: The Dimension Dependence ($d$ scaling)**
-    * Fix $s^*=5$, $Q_{total}=10^7$.
-    * Vary $d \in [20, 50, 100, 200, 500, 1000]$.
-    * **Hypothesis:** Regret should stay roughly constant (or grow very slowly as $\sqrt{\log d}$).
-    * **Baseline:** Compare against standard `LinUCB` (Ridge + $l_2$ confidence), which should degrade rapidly ($\sqrt{d}$).
+## 5. Citation
 
-3.  **Experiment 2: Horizon Scaling ($Q_{total}$ scaling)**
-    * Fix $d=100$, $s^*=5$.
-    * Vary $Q_{total}$ from $10^4$ to $10^8$ (log scale).
-    * **Hypothesis:** Plotting Regret vs $\log(Q_{total})$ should yield a linear relationship.
+If you use this code or the theoretical results, please cite:
 
-## 5. Numerical Limitations
-* **Solver Precision:** As $\epsilon_k \to 0$, weights $w_i \to \infty$. We use log-space calculations where possible, but numerical instability in the Lasso solver may occur at extremely high query counts ($> 10^{10}$).
-* **Action Maximization:** Finding $\text{argmax}_{x \in \mathcal{A}'} (x^\top \hat{\theta} + \beta \|x\|_\infty)$ over the hypercube $[-1, 1]^d$ is a convex maximization problem (max of convex function), which is generally NP-hard.
-    * *Approximation:* Since the objective is convex, the maximum lies at a vertex. We iterate over the $2^d$ vertices? No, that is exponential.
-    * *Relaxation:* In this implementation, we simply check the corners aligned with the sign of $\hat{\theta}$ and random samples, or use a linear programming relaxation if valid. *Correction based on standard literature:* For $l_1$ balls and box constraints, the max is often at a corner. We will implement a heuristic corner search.
-
+```bibtex
+@article{Hu2025qsoful,
+  title={Q-SOFUL: Exponential Quantum Speedups for High-Dimensional Sparse Linear Bandits via $\ell_1$ Confidence and Smoothed Exploration},
+  author={Hu, Hubery},
+  year={2025}
+}
