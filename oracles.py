@@ -99,11 +99,6 @@ class HardwareQiskitOracle(QuantumOracle):
         )
     
 
-# oracles.py
-import numpy as np
-from typing import Tuple
-from environment import QuantumOracle
-
 class ClassicalOracle(QuantumOracle):
     """
     True classical Monte Carlo mean estimation.
